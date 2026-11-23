@@ -1,0 +1,6 @@
+{
+  "name": "CareerJogger",
+  "description": "Fact-grounded job application memory jogger, Google Drive fact vault, Google Sheets tracker sync, and downloadable Chrome extension companion.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

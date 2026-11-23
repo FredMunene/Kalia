@@ -1,0 +1,502 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: default deny everything
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Primitive Helpers
+    // -------------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedEmail() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerifiedEmail() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedEmail()
+        && request.auth.token.email == 'munene2050gitonga@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin()
+        || (isVerifiedEmail() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isStringMax(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
+
+    function isOptionalStringMax(data, key, maxLen) {
+      return !(key in data) || isStringMax(data[key], maxLen);
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Blueprints (Create & Update)
+    // -------------------------------------------------------------------------
+    function isValidProfileMap(p) {
+      return p is map
+        && p.keys().hasOnly([
+          'fullName', 'email', 'phone', 'location', 'headline',
+          'linkedinUrl', 'githubUrl', 'portfolioUrl', 'xUrl',
+          'workAuth', 'yearsExperience'
+        ])
+        && isOptionalStringMax(p, 'fullName', 200)
+        && isOptionalStringMax(p, 'email', 320)
+        && isOptionalStringMax(p, 'phone', 64)
+        && isOptionalStringMax(p, 'location', 200)
+        && isOptionalStringMax(p, 'headline', 500)
+        && isOptionalStringMax(p, 'linkedinUrl', 500)
+        && isOptionalStringMax(p, 'githubUrl', 500)
+        && isOptionalStringMax(p, 'portfolioUrl', 500)
+        && isOptionalStringMax(p, 'xUrl', 500)
+        && isOptionalStringMax(p, 'workAuth', 200)
+        && isOptionalStringMax(p, 'yearsExperience', 64);
+    }
+
+    function isValidWorkspaceConfigMap(w) {
+      return w is map
+        && w.keys().hasOnly([
+          'rootFolderId', 'rootFolderName', 'rootFolderUrl',
+          'trackersFolderId', 'cvsFolderId', 'coverLettersFolderId',
+          'sourcesFolderId', 'createdAt'
+        ])
+        && isOptionalStringMax(w, 'rootFolderId', 256)
+        && isOptionalStringMax(w, 'rootFolderName', 200)
+        && isOptionalStringMax(w, 'rootFolderUrl', 1000)
+        && isOptionalStringMax(w, 'trackersFolderId', 256)
+        && isOptionalStringMax(w, 'cvsFolderId', 256)
+        && isOptionalStringMax(w, 'coverLettersFolderId', 256)
+        && isOptionalStringMax(w, 'sourcesFolderId', 256)
+        && isOptionalStringMax(w, 'createdAt', 64);
+    }
+
+    function isValidSheetConfigMap(s) {
+      return s is map
+        && s.keys().hasOnly([
+          'spreadsheetId', 'spreadsheetTitle', 'spreadsheetUrl',
+          'pipelineTab', 'logTab', 'lastSyncedAt'
+        ])
+        && isOptionalStringMax(s, 'spreadsheetId', 256)
+        && isOptionalStringMax(s, 'spreadsheetTitle', 200)
+        && isOptionalStringMax(s, 'spreadsheetUrl', 1000)
+        && isOptionalStringMax(s, 'pipelineTab', 128)
+        && isOptionalStringMax(s, 'logTab', 128)
+        && isOptionalStringMax(s, 'lastSyncedAt', 64);
+    }
+
+    function isValidMasterCvMap(cv) {
+      return cv is map
+        && cv.keys().hasOnly([
+          'fileName', 'mimeType', 'googleDocId', 'googleDocUrl',
+          'driveFileId', 'driveFileUrl', 'factsFileId', 'rawTextPreview', 'updatedAt'
+        ])
+        && isOptionalStringMax(cv, 'fileName', 256)
+        && isOptionalStringMax(cv, 'mimeType', 128)
+        && isOptionalStringMax(cv, 'googleDocId', 256)
+        && isOptionalStringMax(cv, 'googleDocUrl', 1000)
+        && isOptionalStringMax(cv, 'driveFileId', 256)
+        && isOptionalStringMax(cv, 'driveFileUrl', 1000)
+        && isOptionalStringMax(cv, 'factsFileId', 256)
+        && isOptionalStringMax(cv, 'rawTextPreview', 20000)
+        && isOptionalStringMax(cv, 'updatedAt', 64);
+    }
+
+    function isValidUserWorkspace(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'profile', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'profile',
+          'workspaceConfig', 'sheetConfig', 'masterCv',
+          'extensionConnectedAt', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && isStringMax(data.email, 320)
+        && isStringMax(data.displayName, 200)
+        && isValidProfileMap(data.profile)
+        && (!('workspaceConfig' in data) || isValidWorkspaceConfigMap(data.workspaceConfig))
+        && (!('sheetConfig' in data) || isValidSheetConfigMap(data.sheetConfig))
+        && (!('masterCv' in data) || isValidMasterCvMap(data.masterCv))
+        && isOptionalStringMax(data, 'extensionConnectedAt', 64)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserWorkspaceUpdate(data) {
+      return (!('uid' in data) || (isValidId(data.uid) && data.uid == request.auth.uid))
+        && (!('email' in data) || isStringMax(data.email, 320))
+        && (!('displayName' in data) || isStringMax(data.displayName, 200))
+        && (!('profile' in data) || isValidProfileMap(data.profile))
+        && (!('workspaceConfig' in data) || isValidWorkspaceConfigMap(data.workspaceConfig))
+        && (!('sheetConfig' in data) || isValidSheetConfigMap(data.sheetConfig))
+        && (!('masterCv' in data) || isValidMasterCvMap(data.masterCv))
+        && (!('extensionConnectedAt' in data) || isStringMax(data.extensionConnectedAt, 64))
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidCareerFact(data, factId) {
+      return data.keys().hasAll(['id', 'ownerId', 'category', 'title', 'detail', 'verified', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'ownerId', 'category', 'title', 'detail',
+          'metrics', 'sourceFileId', 'sourceFileName', 'verified',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == factId
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && data.category in [
+          'Identity & Links',
+          'Experience',
+          'Projects',
+          'Hackathons & Wins',
+          'Speaking & DevRel',
+          'Education & Certs'
+        ]
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 240
+        && isStringMax(data.detail, 4000)
+        && isOptionalStringMax(data, 'metrics', 500)
+        && isOptionalStringMax(data, 'sourceFileId', 256)
+        && isOptionalStringMax(data, 'sourceFileName', 256)
+        && data.verified is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCareerFactUpdate(data) {
+      return (!('category' in data) || data.category in ['Identity & Links', 'Experience', 'Projects', 'Hackathons & Wins', 'Speaking & DevRel', 'Education & Certs'])
+        && (!('title' in data) || (data.title is string && data.title.size() >= 1 && data.title.size() <= 240))
+        && (!('detail' in data) || isStringMax(data.detail, 4000))
+        && (!('metrics' in data) || isStringMax(data.metrics, 500))
+        && (!('sourceFileId' in data) || isStringMax(data.sourceFileId, 256))
+        && (!('sourceFileName' in data) || isStringMax(data.sourceFileName, 256))
+        && (!('verified' in data) || data.verified is bool)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidSavedQAs(listVal) {
+      return listVal is list
+        && listVal.size() <= 30
+        && (
+          listVal.size() == 0
+          || (
+            listVal[0] is map
+            && listVal[0].keys().hasAll(['id', 'question', 'answer', 'updatedAt'])
+            && listVal[0].keys().hasOnly(['id', 'question', 'answer', 'citedFactIds', 'updatedAt'])
+            && isStringMax(listVal[0].id, 128)
+            && isStringMax(listVal[0].question, 1000)
+            && isStringMax(listVal[0].answer, 8000)
+            && (!('citedFactIds' in listVal[0]) || (listVal[0].citedFactIds is list && listVal[0].citedFactIds.size() <= 20))
+            && isStringMax(listVal[0].updatedAt, 64)
+          )
+        );
+    }
+
+    function isValidJobApplication(data, applicationId) {
+      return data.keys().hasAll(['id', 'ownerId', 'company', 'role', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'ownerId', 'company', 'role', 'location', 'siteLink',
+          'status', 'cvVersion', 'notes', 'deadline', 'submissionDate',
+          'companyProfile', 'source', 'otherLinks', 'interviewPrep',
+          'matchScore', 'tokensUsed', 'cvDocId', 'cvDocUrl',
+          'coverDocId', 'coverDocUrl', 'savedQAs', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == applicationId
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && isStringMax(data.company, 200)
+        && isStringMax(data.role, 200)
+        && isOptionalStringMax(data, 'location', 200)
+        && isOptionalStringMax(data, 'siteLink', 1000)
+        && isStringMax(data.status, 64)
+        && isOptionalStringMax(data, 'cvVersion', 200)
+        && isOptionalStringMax(data, 'notes', 4000)
+        && isOptionalStringMax(data, 'deadline', 64)
+        && isOptionalStringMax(data, 'submissionDate', 64)
+        && isOptionalStringMax(data, 'companyProfile', 2000)
+        && isOptionalStringMax(data, 'source', 200)
+        && isOptionalStringMax(data, 'otherLinks', 1000)
+        && isOptionalStringMax(data, 'interviewPrep', 4000)
+        && (!('matchScore' in data) || (data.matchScore is number && data.matchScore >= 0 && data.matchScore <= 100))
+        && (!('tokensUsed' in data) || (data.tokensUsed is number && data.tokensUsed >= 0 && data.tokensUsed <= 100000000))
+        && isOptionalStringMax(data, 'cvDocId', 256)
+        && isOptionalStringMax(data, 'cvDocUrl', 1000)
+        && isOptionalStringMax(data, 'coverDocId', 256)
+        && isOptionalStringMax(data, 'coverDocUrl', 1000)
+        && (!('savedQAs' in data) || isValidSavedQAs(data.savedQAs))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidJobApplicationUpdate(data) {
+      return (!('company' in data) || isStringMax(data.company, 200))
+        && (!('role' in data) || isStringMax(data.role, 200))
+        && (!('location' in data) || isStringMax(data.location, 200))
+        && (!('siteLink' in data) || isStringMax(data.siteLink, 1000))
+        && (!('status' in data) || isStringMax(data.status, 64))
+        && (!('cvVersion' in data) || isStringMax(data.cvVersion, 200))
+        && (!('notes' in data) || isStringMax(data.notes, 4000))
+        && (!('deadline' in data) || isStringMax(data.deadline, 64))
+        && (!('submissionDate' in data) || isStringMax(data.submissionDate, 64))
+        && (!('companyProfile' in data) || isStringMax(data.companyProfile, 2000))
+        && (!('source' in data) || isStringMax(data.source, 200))
+        && (!('otherLinks' in data) || isStringMax(data.otherLinks, 1000))
+        && (!('interviewPrep' in data) || isStringMax(data.interviewPrep, 4000))
+        && (!('matchScore' in data) || (data.matchScore is number && data.matchScore >= 0 && data.matchScore <= 100))
+        && (!('tokensUsed' in data) || (data.tokensUsed is number && data.tokensUsed >= 0 && data.tokensUsed <= 100000000))
+        && (!('cvDocId' in data) || isStringMax(data.cvDocId, 256))
+        && (!('cvDocUrl' in data) || isStringMax(data.cvDocUrl, 1000))
+        && (!('coverDocId' in data) || isStringMax(data.coverDocId, 256))
+        && (!('coverDocUrl' in data) || isStringMax(data.coverDocUrl, 1000))
+        && (!('savedQAs' in data) || isValidSavedQAs(data.savedQAs))
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidGeneratedDocument(data, docId) {
+      return data.keys().hasAll(['id', 'ownerId', 'docType', 'company', 'role', 'title', 'pdfFileName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'ownerId', 'docType', 'roleId', 'company', 'role', 'title',
+          'googleDocId', 'googleDocUrl', 'pdfFileName', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == docId
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && data.docType in ['cv', 'coverLetter']
+        && isOptionalStringMax(data, 'roleId', 128)
+        && isStringMax(data.company, 200)
+        && isStringMax(data.role, 200)
+        && isStringMax(data.title, 240)
+        && isOptionalStringMax(data, 'googleDocId', 256)
+        && isOptionalStringMax(data, 'googleDocUrl', 1000)
+        && isStringMax(data.pdfFileName, 256)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidGeneratedDocumentUpdate(data) {
+      return (!('roleId' in data) || isStringMax(data.roleId, 128))
+        && (!('company' in data) || isStringMax(data.company, 200))
+        && (!('role' in data) || isStringMax(data.role, 200))
+        && (!('title' in data) || isStringMax(data.title, 240))
+        && (!('googleDocId' in data) || isStringMax(data.googleDocId, 256))
+        && (!('googleDocUrl' in data) || isStringMax(data.googleDocUrl, 1000))
+        && (!('pdfFileName' in data) || isStringMax(data.pdfFileName, 256))
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidUserStats(data, userId) {
+      return data.keys().hasAll([
+          'uid', 'email', 'displayName', 'applicationCount',
+          'masterCvUploaded', 'driveWorkspaceLinked',
+          'promptTokens', 'outputTokens', 'totalTokensUsed',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'applicationCount',
+          'masterCvUploaded', 'driveWorkspaceLinked',
+          'promptTokens', 'outputTokens', 'totalTokensUsed',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.uid == userId
+        && isStringMax(data.email, 320)
+        && isStringMax(data.displayName, 200)
+        && data.applicationCount is number && data.applicationCount >= 0 && data.applicationCount <= 1000000
+        && data.masterCvUploaded is bool
+        && data.driveWorkspaceLinked is bool
+        && data.promptTokens is number && data.promptTokens >= 0 && data.promptTokens <= 1000000000
+        && data.outputTokens is number && data.outputTokens >= 0 && data.outputTokens <= 1000000000
+        && data.totalTokensUsed is number && data.totalTokensUsed >= 0 && data.totalTokensUsed <= 2000000000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserStatsUpdate(data) {
+      return (!('email' in data) || isStringMax(data.email, 320))
+        && (!('displayName' in data) || isStringMax(data.displayName, 200))
+        && (!('applicationCount' in data) || (data.applicationCount is number && data.applicationCount >= 0 && data.applicationCount <= 1000000))
+        && (!('masterCvUploaded' in data) || data.masterCvUploaded is bool)
+        && (!('driveWorkspaceLinked' in data) || data.driveWorkspaceLinked is bool)
+        && (!('promptTokens' in data) || (data.promptTokens is number && data.promptTokens >= 0 && data.promptTokens <= 1000000000))
+        && (!('outputTokens' in data) || (data.outputTokens is number && data.outputTokens >= 0 && data.outputTokens <= 1000000000))
+        && (!('totalTokensUsed' in data) || (data.totalTokensUsed is number && data.totalTokensUsed >= 0 && data.totalTokensUsed <= 2000000000))
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function parentUserExistsAndOwned(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId))
+        && get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Match Rules
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isVerifiedEmail()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserWorkspace(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedEmail()
+        && isValidId(userId)
+        && isValidUserWorkspaceUpdate(incoming())
+        && isOwner(userId)
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'email', 'profile', 'workspaceConfig',
+          'sheetConfig', 'masterCv', 'extensionConnectedAt', 'updatedAt'
+        ]);
+
+      allow delete: if false;
+
+      match /facts/{factId} {
+        allow get: if isValidId(userId) && isValidId(factId) && isOwner(userId) && parentUserExistsAndOwned(userId);
+        allow list: if isVerifiedEmail() && resource.data.ownerId == request.auth.uid;
+
+        allow create: if isVerifiedEmail()
+          && isValidId(userId)
+          && isValidId(factId)
+          && isOwner(userId)
+          && isValidCareerFact(incoming(), factId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && parentUserExistsAndOwned(userId);
+
+        allow update: if isVerifiedEmail()
+          && isValidId(userId)
+          && isValidId(factId)
+          && isValidCareerFactUpdate(incoming())
+          && isOwner(userId)
+          && parentUserExistsAndOwned(userId)
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'category', 'title', 'detail', 'metrics',
+            'sourceFileId', 'sourceFileName', 'verified', 'updatedAt'
+          ]);
+
+        allow delete: if isValidId(userId) && isValidId(factId) && isOwner(userId) && parentUserExistsAndOwned(userId);
+      }
+
+      match /applications/{applicationId} {
+        allow get: if isValidId(userId) && isValidId(applicationId) && isOwner(userId) && parentUserExistsAndOwned(userId);
+        allow list: if isVerifiedEmail() && resource.data.ownerId == request.auth.uid;
+
+        allow create: if isVerifiedEmail()
+          && isValidId(userId)
+          && isValidId(applicationId)
+          && isOwner(userId)
+          && isValidJobApplication(incoming(), applicationId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && parentUserExistsAndOwned(userId);
+
+        allow update: if isVerifiedEmail()
+          && isValidId(userId)
+          && isValidId(applicationId)
+          && isValidJobApplicationUpdate(incoming())
+          && isOwner(userId)
+          && parentUserExistsAndOwned(userId)
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'company', 'role', 'location', 'siteLink', 'status',
+            'cvVersion', 'notes', 'deadline', 'submissionDate',
+            'companyProfile', 'source', 'otherLinks', 'interviewPrep',
+            'matchScore', 'tokensUsed', 'cvDocId', 'cvDocUrl',
+            'coverDocId', 'coverDocUrl', 'savedQAs', 'updatedAt'
+          ]);
+
+        allow delete: if isValidId(userId) && isValidId(applicationId) && isOwner(userId) && parentUserExistsAndOwned(userId);
+      }
+
+      match /generatedDocs/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId) && isOwner(userId) && parentUserExistsAndOwned(userId);
+        allow list: if isVerifiedEmail() && resource.data.ownerId == request.auth.uid;
+
+        allow create: if isVerifiedEmail()
+          && isValidId(userId)
+          && isValidId(docId)
+          && isOwner(userId)
+          && isValidGeneratedDocument(incoming(), docId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && parentUserExistsAndOwned(userId);
+
+        allow update: if isVerifiedEmail()
+          && isValidId(userId)
+          && isValidId(docId)
+          && isValidGeneratedDocumentUpdate(incoming())
+          && isOwner(userId)
+          && parentUserExistsAndOwned(userId)
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'roleId', 'company', 'role', 'title',
+            'googleDocId', 'googleDocUrl', 'pdfFileName', 'updatedAt'
+          ]);
+
+        allow delete: if isValidId(userId) && isValidId(docId) && isOwner(userId) && parentUserExistsAndOwned(userId);
+      }
+    }
+
+    match /userStats/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin() || (isVerifiedEmail() && resource.data.uid == request.auth.uid);
+
+      allow create: if isVerifiedEmail()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserStats(incoming(), userId)
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedEmail()
+        && isValidId(userId)
+        && isValidUserStatsUpdate(incoming())
+        && (isOwner(userId) || isAdmin())
+        && incoming().promptTokens >= existing().promptTokens
+        && incoming().outputTokens >= existing().outputTokens
+        && incoming().totalTokensUsed >= existing().totalTokensUsed
+        && (
+          isAdmin()
+          || incoming().diff(existing()).affectedKeys().hasOnly([
+            'email', 'displayName', 'applicationCount',
+            'masterCvUploaded', 'driveWorkspaceLinked',
+            'promptTokens', 'outputTokens', 'totalTokensUsed', 'updatedAt'
+          ])
+        );
+
+      allow delete: if false;
+    }
+
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isBootstrappedAdmin());
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+  }
+}

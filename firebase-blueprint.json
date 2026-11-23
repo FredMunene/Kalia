@@ -1,0 +1,420 @@
+{
+  "entities": {
+    "UserWorkspace": {
+      "title": "UserWorkspace",
+      "description": "Private user workspace metadata, Drive workspace pointers, Master CV summary, and autofill contact profile.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 320
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "profile": {
+          "type": "object",
+          "description": "Standard form autofill contact defaults and canonical links."
+        },
+        "workspaceConfig": {
+          "type": "object",
+          "description": "User's Google Drive CareerJogger Workspace folder IDs and URLs."
+        },
+        "sheetConfig": {
+          "type": "object",
+          "description": "User's linked Google Sheets Job Tracker spreadsheet ID, URL, and tab names."
+        },
+        "masterCv": {
+          "type": "object",
+          "description": "Master CV metadata, Drive file / Google Doc IDs, Master Facts JSON Drive file ID, and parsed preview."
+        },
+        "extensionConnectedAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "displayName",
+        "profile",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CareerFact": {
+      "title": "CareerFact",
+      "description": "Verified career fact card extracted from the user's Master CV or Drive files.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Identity & Links",
+            "Experience",
+            "Projects",
+            "Hackathons & Wins",
+            "Speaking & DevRel",
+            "Education & Certs"
+          ],
+          "maxLength": 64
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "detail": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "metrics": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "sourceFileId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "sourceFileName": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "category",
+        "title",
+        "detail",
+        "verified",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "JobApplication": {
+      "title": "JobApplication",
+      "description": "Tracked or submitted job application with saved Q&As and links to tailored Google Docs.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "company": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "role": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "siteLink": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "cvVersion": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "deadline": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "submissionDate": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "companyProfile": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "otherLinks": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "interviewPrep": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "matchScore": {
+          "type": "number"
+        },
+        "tokensUsed": {
+          "type": "number"
+        },
+        "cvDocId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "cvDocUrl": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "coverDocId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "coverDocUrl": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "savedQAs": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "company",
+        "role",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "GeneratedDocument": {
+      "title": "GeneratedDocument",
+      "description": "Metadata pointer to a tailored CV or Cover Letter Google Doc stored in the user's Drive.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "docType": {
+          "type": "string",
+          "enum": ["cv", "coverLetter"],
+          "maxLength": 32
+        },
+        "roleId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "company": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "role": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "googleDocId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "googleDocUrl": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "pdfFileName": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "docType",
+        "company",
+        "role",
+        "title",
+        "pdfFileName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserUsageStats": {
+      "title": "UserUsageStats",
+      "description": "Per-user aggregate application count and Gemini token telemetry readable by the owner and platform admin.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 320
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "applicationCount": {
+          "type": "number"
+        },
+        "masterCvUploaded": {
+          "type": "boolean"
+        },
+        "driveWorkspaceLinked": {
+          "type": "boolean"
+        },
+        "promptTokens": {
+          "type": "number"
+        },
+        "outputTokens": {
+          "type": "number"
+        },
+        "totalTokensUsed": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "displayName",
+        "applicationCount",
+        "masterCvUploaded",
+        "driveWorkspaceLinked",
+        "promptTokens",
+        "outputTokens",
+        "totalTokensUsed",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminMarker": {
+      "title": "AdminMarker",
+      "description": "Trusted admin marker document restricting admin privileges.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 320
+        },
+        "grantedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "grantedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserWorkspace" },
+      "description": "Private user workspace document storing Drive workspace IDs, Sheet config, Master CV links, and autofill profile."
+    },
+    "/users/{userId}/facts/{factId}": {
+      "schema": { "$ref": "#/entities/CareerFact" },
+      "description": "Private verified career facts synchronized with the user's Drive Master Facts JSON."
+    },
+    "/users/{userId}/applications/{applicationId}": {
+      "schema": { "$ref": "#/entities/JobApplication" },
+      "description": "Private tracked and submitted job applications synchronized with the user's Google Sheet tracker."
+    },
+    "/users/{userId}/generatedDocs/{docId}": {
+      "schema": { "$ref": "#/entities/GeneratedDocument" },
+      "description": "Metadata pointers to tailored CVs and Cover Letters created in the user's Google Drive."
+    },
+    "/userStats/{userId}": {
+      "schema": { "$ref": "#/entities/UserUsageStats" },
+      "description": "Aggregate per-user application count and Gemini token telemetry for Admin Usage dashboard."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminMarker" },
+      "description": "Read-only admin roster document for privilege checks."
+    }
+  }
+}
